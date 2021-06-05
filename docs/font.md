@@ -2,7 +2,7 @@
 id: font
 title: Font
 ---
-By changing the variables in the `fonts.less` file at the [katex-fonts submodule](https://github.com/KaTeX/katex-fonts/),
+By changing the variables in the `src/fonts.less` file,
 several properties of the way fonts are used can be changed.
 
 ## Font size and lengths
@@ -35,7 +35,7 @@ KaTeX will automatically include only necessary fonts for target environments
 specified by [Browserslist config](https://github.com/browserslist/browserslist#queries).
 
 To force a font type to be included or excluded, set `USE_(FONT NAME)` environment
-variable to `"true"` or `"false"`, respectively.`
+variable to `"true"` or `"false"`, respectively.
 
 ## Location of font files
 

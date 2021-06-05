@@ -1,11 +1,15 @@
 // @flow
 const path = require('path');
+// $FlowIgnore
 const TerserPlugin = require('terser-webpack-plugin');
+// $FlowIgnore
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 const {version} = require("./package.json");
 
+// $FlowIgnore
 const browserslist = require('browserslist')();
+// $FlowIgnore
 const caniuse = require('caniuse-lite');
 
 // from the least supported to the most supported
@@ -56,13 +60,17 @@ const targets /*: Array<Target> */ = [
  */
 function createConfig(target /*: Target */, dev /*: boolean */,
         minimize /*: boolean */) /*: Object */ {
-    const cssLoaders /*: Array<Object> */ = [{loader: 'css-loader'}];
+    const cssLoaders /*: Array<Object> */ = [{
+        loader: 'css-loader',
+        options: {importLoaders: 1},
+    }, {
+        loader: 'postcss-loader',
+        // $FlowIgnore
+        options: {postcssOptions: {plugins: [require('postcss-preset-env')()]}},
+    }];
     if (minimize) {
-        cssLoaders[0].options = {importLoaders: 1};
-        cssLoaders.push({
-            loader: 'postcss-loader',
-            options: {plugins: [require('cssnano')()]},
-        });
+        // $FlowIgnore
+        cssLoaders[1].options.postcssOptions.plugins.push(require('cssnano')());
     }
 
     const lessOptions = {modifyVars: {
@@ -96,6 +104,7 @@ function createConfig(target /*: Target */, dev /*: boolean */,
             libraryExport: 'default',
             // Enable output modules to be used in browser or Node.
             // See: https://github.com/webpack/webpack/issues/6522
+            // https://github.com/webpack/webpack/pull/11987
             globalObject: "(typeof self !== 'undefined' ? self : this)",
             path: path.resolve(__dirname, 'dist'),
             publicPath: dev ? '/' : '',
@@ -121,7 +130,7 @@ function createConfig(target /*: Target */, dev /*: boolean */,
                         ...cssLoaders,
                         {
                             loader: 'less-loader',
-                            options: lessOptions,
+                            options: {lessOptions},
                         },
                     ],
                 },
@@ -157,6 +166,9 @@ function createConfig(target /*: Target */, dev /*: boolean */,
         },
         performance: {
             hints: false,
+        },
+        stats: {
+            colors: true,
         },
     };
 }

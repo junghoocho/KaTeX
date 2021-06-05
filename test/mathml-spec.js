@@ -1,7 +1,3 @@
-/* global expect: false */
-/* global it: false */
-/* global describe: false */
-
 import buildMathML from "../src/buildMathML";
 import parseTree from "../src/parseTree";
 import Options from "../src/Options";
@@ -48,6 +44,11 @@ describe("A MathML builder", function() {
         expect(getMathML("\\displaystyle\\sum_a^b")).toMatchSnapshot();
     });
 
+    it('should use <msupsub> for integrals', () => {
+        expect(getMathML("\\displaystyle\\int_a^b + " +
+            "\\oiint_a^b + \\oiiint_a^b")).toMatchSnapshot();
+    });
+
     it('should use <msupsub> for regular operators', () => {
         expect(getMathML("\\textstyle\\sum_a^b")).toMatchSnapshot();
     });
@@ -69,8 +70,20 @@ describe("A MathML builder", function() {
         expect(getMathML("\\raisebox{0.25em}{b}")).toMatchSnapshot();
     });
 
+    it('should size delimiters correctly', () => {
+        expect(getMathML("(M) \\big(M\\big) \\Big(M\\Big) \\bigg(M\\bigg)" +
+        " \\Bigg(M\\Bigg)")).toMatchSnapshot();
+    });
+
     it('should use <menclose> for colorbox', () => {
         expect(getMathML("\\colorbox{red}{b}")).toMatchSnapshot();
+    });
+
+    it('should build the CD environment properly', () => {
+        const displaySettings = new Settings({displayMode: true, strict: false});
+        const mathml = getMathML("\\begin{CD} A @>a>> B\\\\ @VVbV @VVcV\\\\" +
+            " C @>d>> D \\end{CD}", displaySettings);
+        expect(mathml).toMatchSnapshot();
     });
 
     it('should set href attribute for href appropriately', () => {

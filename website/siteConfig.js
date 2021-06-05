@@ -47,8 +47,8 @@ const users = [
     },
     {
         caption: 'Gatsby',
-        image: 'https://www.gatsbyjs.org/monogram.svg',
-        infoLink: 'https://www.gatsbyjs.org/',
+        image: 'https://www.gatsbyjs.com/Gatsby-Monogram.svg',
+        infoLink: 'https://www.gatsbyjs.com/',
     },
     {
         caption: 'Gitter',
@@ -76,9 +76,24 @@ const users = [
         infoLink: 'https://www.intmath.com/',
     },
     {
+        caption: 'Marker',
+        image: 'https://raw.githubusercontent.com/fabiocolacio/Marker/master/data/com.github.fabiocolacio.marker.svg',
+        infoLink: 'https://fabiocolacio.github.io/Marker/',
+    },
+    {
+        caption: 'MathWills',
+        image: '/img/mathwills_logo.svg',
+        infoLink: 'https://www.mathwills.com/',
+    },
+    {
         caption: 'Messenger',
         image: 'https://en.facebookbrand.com/wp-content/uploads/2016/09/messenger_icon2.png',
         infoLink: 'https://www.messenger.com/',
+    },
+    {
+        caption: 'MonsterWriter',
+        image: 'https://www.monsterwriter.app/assets/logo.png',
+        infoLink: 'https://www.monsterwriter.app/',
     },
     {
         caption: 'namu.wiki',
@@ -121,6 +136,16 @@ const users = [
         infoLink: 'https://stackedit.io/',
     },
     {
+        caption: 'Tamasha',
+        image: 'https://github.com/kookma/TW-Tamasha/raw/main/docs/tamasha.png',
+        infoLink: 'https://kookma.github.io/TW-Tamasha/',
+    },
+    {
+        caption: 'TiddlyWiki',
+        image: '/img/tiddlywiki_logo.svg',
+        infoLink: 'https://tiddlywiki.com/',
+    },
+    {
         caption: 'Tutti Quanti Shelf',
         image: 'https://raw.githubusercontent.com/tonton-pixel/tutti-quanti-shelf/master/icons/icon.png',
         infoLink: 'https://github.com/tonton-pixel/tutti-quanti-shelf/',
@@ -131,6 +156,8 @@ const users = [
         infoLink: 'https://github.com/tonton-pixel/vade-mecum-shelf/',
     },
 ];
+
+const {version} = require('../package.json');
 
 const siteConfig = {
     title: 'KaTeX',
@@ -145,6 +172,8 @@ const siteConfig = {
     headerLinks: [
         {href: '/#demo', label: 'Try'},
         {doc: 'node', label: 'Docs'},
+        // always link to the latest version page
+        {href: 'https://katex.org/versions.html', label: 'v' + version},
         {page: 'users', label: 'Users'},
         {href: 'https://github.com/KaTeX/KaTeX', label: 'GitHub'},
         {search: true},
@@ -157,6 +186,7 @@ const siteConfig = {
     favicon: '../favicon.ico',
 
     disableHeaderTitle: true,
+    scrollToTop: true,
 
     /* colors for website */
     colors: {
@@ -182,7 +212,6 @@ const siteConfig = {
 
     scripts: [
         'https://buttons.github.io/buttons.js',
-        '/js/scrollspy.js',
     ],
 
     separateCss: ['static/static', 'static\\static'],
@@ -191,7 +220,7 @@ const siteConfig = {
         apiKey: '46ecd80046d78d4e5d9a5c06f559dfaa',
         indexName: 'katex',
         algoliaOptions: {
-            facetFilters: ['language:LANGUAGE', 'version:VERSION'],
+            facetFilters: ['language:LANGUAGE'],
         },
     },
 

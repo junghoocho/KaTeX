@@ -8,11 +8,18 @@ const net = require("net");
 const os = require("os");
 const pako = require("pako");
 const path = require("path");
+const got = require("got");
+
 const selenium = require("selenium-webdriver");
 const firefox = require("selenium-webdriver/firefox");
+const chrome = require("selenium-webdriver/chrome");
+const seleniumHttp = require("selenium-webdriver/http");
 
-const istanbulApi = require('istanbul-api');
 const istanbulLibCoverage = require('istanbul-lib-coverage');
+const istanbulLibReport = require('istanbul-lib-report');
+const istanbulReports = require('istanbul-reports');
+
+const browserstack = require('browserstack-local');
 
 const webpack = require('webpack');
 const WebpackDevServer = require("webpack-dev-server");
@@ -40,6 +47,7 @@ const opts = require("commander")
         "Port number of the Selenium web driver", 4444, parseInt)
     .option("--selenium-capabilities <JSON>",
         "Desired capabilities of the Selenium web driver", JSON.parse)
+    .option("--selenium-proxy <url>", "Use Selenium proxy if specified")
     .option("--katex-url <url>", "Full URL of the KaTeX development server")
     .option("--katex-ip <ip>", "IP address of the KaTeX development server")
     .option("--katex-port <n>",
@@ -58,6 +66,9 @@ const opts = require("commander")
         "Retry this many times before reporting failure", 5, parseInt)
     .option("--wait <secs>",
         "Wait this many seconds between page load and screenshot", parseFloat)
+    .option("--browserstack", "Use Browserstack. The username and access key"
+        + " should be set as enviroment variable BROWSERSTACK_USER and"
+        + " BROWSERSTACK_ACCESS_KEY")
     .parse(process.argv);
 
 let listOfCases;
@@ -79,6 +90,24 @@ let seleniumPort = opts.seleniumPort;
 let katexURL = opts.katexUrl;
 let katexIP = opts.katexIp;
 let katexPort = opts.katexPort;
+
+let bsLocal;
+if (opts.browserstack) {
+    // https://www.browserstack.com/automate/node
+    if (!seleniumURL) {
+        seleniumURL = "http://hub-cloud.browserstack.com/wd/hub";
+    }
+    // https://www.browserstack.com/local-testing/automate#test-localhost-websites
+    if (!katexIP && opts.browser === "safari") {
+        katexIP = "bs-local.com";
+    }
+    opts.seleniumCapabilities = Object.assign({
+        resolution: "1280x1024",
+        "browserstack.user": process.env.BROWSERSTACK_USER,
+        "browserstack.key": process.env.BROWSERSTACK_ACCESS_KEY,
+        "browserstack.local": true,
+    }, opts.seleniumCapabilities);
+}
 
 //////////////////////////////////////////////////////////////////////
 // Work out connection to selenium docker container
@@ -128,8 +157,12 @@ function guessDockerIPs() {
         return;
     }
     // Native Docker on Linux or remote Docker daemon or similar
-    const gatewayIP = cmd("docker", "inspect",
-      "-f", "{{.NetworkSettings.Gateway}}", opts.container);
+    // https://docs.docker.com/engine/tutorials/networkingcontainers/
+    const gatewayIP = cmd("docker", "inspect", // using default bridge network
+        "-f", "{{.NetworkSettings.Gateway}}", opts.container)
+      || cmd("docker", "inspect", // using own network
+        "-f", "{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}",
+        opts.container);
     seleniumIP = seleniumIP || gatewayIP;
     katexIP = katexIP || gatewayIP;
 }
@@ -139,7 +172,8 @@ if (!seleniumURL && opts.container) {
         guessDockerIPs();
     }
     seleniumPort = cmd("docker", "port", opts.container, seleniumPort);
-    seleniumPort = seleniumPort.replace(/^.*:/, "");
+    // Docker can output two lines, such as "0.0.0.0:49156\n:::49156"
+    seleniumPort = seleniumPort.replace(/[^]*:([0-9]+)[^]*/, "$1");
 }
 if (!seleniumURL && seleniumIP) {
     seleniumURL = "http://" + seleniumIP + ":" + seleniumPort + "/wd/hub";
@@ -175,28 +209,52 @@ function startServer() {
             options: {
                 plugins: [['istanbul', {
                     include: ["src/**/*.js"],
-                    exclude: ["src/unicodeMake.js"],
+                    exclude: ["src/unicodeSymbols.js"],
                 }]],
             },
         };
     }
+    const config = {
+        ...webpackConfig.devServer,
+        port,
+        hot: false,
+        liveReload: false,
+        injectClient: false,
+    };
     const compiler = webpack(webpackConfig);
-    const wds = new WebpackDevServer(compiler, webpackConfig.devServer);
-    const server = wds.listen(port);
-    server.once("listening", function() {
-        devServer = wds;
-        katexPort = port;
-        attempts = 0;
-        process.nextTick(tryConnect);
+    const wds = new WebpackDevServer(compiler, config);
+    wds.listen(port).then(server => {
+        server.once("listening", function() {
+            devServer = wds;
+            katexPort = port;
+            attempts = 0;
+            process.nextTick(opts.seleniumProxy ? getProxyDriver
+                : opts.browserstack ? startBrowserstackLocal : tryConnect);
+        });
+        server.on("error", function(err) {
+            if (devServer !== null) { // error after we started listening
+                throw err;
+            } else if (++attempts > 50) {
+                throw new Error("Failed to start up dev server");
+            } else {
+                process.nextTick(startServer);
+            }
+        });
     });
-    server.on("error", function(err) {
-        if (devServer !== null) { // error after we started listening
+}
+
+// Start Browserstack Local connection
+function startBrowserstackLocal() {
+    // unique identifier for the session
+    const localIdentifier = process.env.CIRCLE_BUILD_NUM || "p" + katexPort;
+    opts.seleniumCapabilities["browserstack.localIdentifier"] = localIdentifier;
+
+    bsLocal = new browserstack.Local();
+    bsLocal.start({localIdentifier}, function(err) {
+        if (err) {
             throw err;
-        } else if (++attempts > 50) {
-            throw new Error("Failed to start up dev server");
-        } else {
-            process.nextTick(startServer);
         }
+        process.nextTick(tryConnect);
     });
 }
 
@@ -238,6 +296,10 @@ function buildDriver() {
         ffProfile.setPreference("browser.startup.page", 0);
         const ffOptions = new firefox.Options().setProfile(ffProfile);
         builder.setFirefoxOptions(ffOptions);
+    } else if (opts.browser === "chrome") {
+        // https://stackoverflow.com/questions/48450594/selenium-timed-out-receiving-message-from-renderer
+        const chrOptions = new chrome.Options().addArguments("--disable-gpu");
+        builder.setChromeOptions(chrOptions);
     }
     if (seleniumURL) {
         builder.usingServer(seleniumURL);
@@ -246,6 +308,28 @@ function buildDriver() {
         builder.withCapabilities(opts.seleniumCapabilities);
     }
     driver = builder.build();
+    setupDriver();
+}
+
+function getProxyDriver() {
+    got.post(opts.seleniumProxy, {
+        json: {
+            browserstack: opts.browserstack,
+            capabilities: opts.seleniumCapabilities,
+            seleniumURL,
+        },
+        responseType: 'json',
+    }).then(({body}) => {
+        const session = new selenium.Session(body.id, body.capabilities);
+        const client = Promise.resolve(seleniumURL)
+            .then(url => new seleniumHttp.HttpClient(url));
+        const executor = new seleniumHttp.Executor(client);
+        driver = new selenium.WebDriver(session, executor);
+        setupDriver();
+    });
+}
+
+function setupDriver() {
     driver.manage().timeouts().setScriptTimeout(3000).then(function() {
         let html = '<!DOCTYPE html>' +
             '<html><head><style type="text/css">html,body{' +
@@ -282,7 +366,7 @@ function setSize(reqW, reqH) {
 }
 
 function imageDimensions(img) {
-    const buf = new Buffer(img, "base64");
+    const buf = Buffer.from(img, "base64");
     return {
         buf: buf,
         width: buf.readUInt32BE(16),
@@ -410,7 +494,7 @@ function takeScreenshot(key) {
     function loadFonts() {
         driver.executeAsyncScript(
                 "var callback = arguments[arguments.length - 1]; " +
-                "load_fonts(callback);")
+                "load_fonts_and_images(callback);")
             .then(waitThenScreenshot);
     }
 
@@ -529,9 +613,11 @@ function takeScreenshot(key) {
             }
             if (opts.coverage) {
                 collectCoverage().then(function() {
-                    const reporter = istanbulApi.createReporter();
-                    reporter.addAll(['json', 'text', 'lcov']);
-                    reporter.write(coverageMap);
+                    const context = istanbulLibReport.createContext({coverageMap});
+                    ['json', 'text', 'lcov'].forEach(fmt => {
+                        const report = istanbulReports.create(fmt);
+                        report.execute(context);
+                    });
                     done();
                 });
                 return;
@@ -543,7 +629,13 @@ function takeScreenshot(key) {
     function done() {
         // devServer.close(cb) will take too long.
         driver.quit().then(() => {
-            process.exit(exitStatus);
+            if (bsLocal) {
+                bsLocal.stop(() => {
+                    process.exit(exitStatus);
+                });
+            } else {
+                process.exit(exitStatus);
+            }
         });
     }
 }
